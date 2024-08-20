@@ -4,9 +4,10 @@ import java.util.Map;
 public class InventoryManager {
 
     private final Map<Product, Map<Warehouse, Integer>> stockLevels = new HashMap<>();
-    private final Map<Product, Integer> reorderThresholds = new HashMap<>();
-    private final Map<Product, Integer> reorderQuantities = new HashMap<>();
+    private final Map<Product, Map<String, Integer>> regionalReorderThresholds = new HashMap<>();
+    private final Map<Product, Map<String, Integer>> regionalReorderQuantities = new HashMap<>();
     private final Map<Product, Supplier> productSuppliers = new HashMap<>();
+    private final Map<Product, Double> leadTimes = new HashMap<>();
 
     public void addProductStock(Product product, Warehouse warehouse, int quantity) {
         if (quantity < 0) {
@@ -17,16 +18,24 @@ public class InventoryManager {
         warehouseStock.put(warehouse, warehouseStock.getOrDefault(warehouse, 0) + quantity);
     }
 
-    public void setReorderThreshold(Product product, int threshold) {
-        reorderThresholds.put(product, threshold);
+    public void setRegionalReorderThreshold(Product product, String region, int threshold) {
+        regionalReorderThresholds
+                .computeIfAbsent(product, k -> new HashMap<>())
+                .put(region, threshold);
     }
 
-    public void setReorderQuantity(Product product, int quantity) {
-        reorderQuantities.put(product, quantity);
+    public void setRegionalReorderQuantity(Product product, String region, int quantity) {
+        regionalReorderQuantities
+                .computeIfAbsent(product, k -> new HashMap<>())
+                .put(region, quantity);
     }
 
     public void addSupplier(Product product, Supplier supplier) {
         productSuppliers.put(product, supplier);
+    }
+
+    public void setLeadTime(Product product, double leadTime) {
+        leadTimes.put(product, leadTime);
     }
 
     public String monitorStockLevels() {
@@ -38,10 +47,13 @@ public class InventoryManager {
             for (Map.Entry<Warehouse, Integer> warehouseEntry : warehouseStock.entrySet()) {
                 Warehouse warehouse = warehouseEntry.getKey();
                 int stockLevel = warehouseEntry.getValue();
+                String region = warehouse.location(); // Assuming `location` can be used as a region
 
-                int threshold = reorderThresholds.getOrDefault(product, 0);
+                int threshold = regionalReorderThresholds
+                        .getOrDefault(product, new HashMap<>())
+                        .getOrDefault(region, Integer.MAX_VALUE);
                 if (stockLevel < threshold) {
-                    String reorderMessage = triggerReorder(product, warehouse);
+                    String reorderMessage = triggerReorder(product, warehouse, region);
                     result.append(reorderMessage).append("\n");
                 }
             }
@@ -49,31 +61,41 @@ public class InventoryManager {
         return result.toString().trim();
     }
 
-    private String triggerReorder(Product product, Warehouse warehouse) {
+    private String triggerReorder(Product product, Warehouse warehouse, String region) {
         Supplier supplier = productSuppliers.get(product);
         if (supplier == null) {
             throw new IllegalStateException("No supplier available for product: " + product.name());
         }
 
-        int reorderQuantity = reorderQuantities.getOrDefault(product, 0);
+        int reorderQuantity = regionalReorderQuantities
+                .getOrDefault(product, new HashMap<>())
+                .getOrDefault(region, 0);
+        double leadTime = leadTimes.getOrDefault(product, 0.0);
+
         return "Reordering " + reorderQuantity + " units of " + product.name() +
                 " from supplier " + supplier.name() +
-                " for warehouse " + warehouse.name();
+                " for warehouse " + warehouse.name() +
+                " in region " + region +
+                ". Estimated delivery time: " + leadTime + " days.";
     }
 
     public Map<Product, Map<Warehouse, Integer>> getStockLevels() {
         return stockLevels;
     }
 
-    public Map<Product, Integer> getReorderThresholds() {
-        return reorderThresholds;
+    public Map<Product, Map<String, Integer>> getRegionalReorderThresholds() {
+        return regionalReorderThresholds;
     }
 
-    public Map<Product, Integer> getReorderQuantities() {
-        return reorderQuantities;
+    public Map<Product, Map<String, Integer>> getRegionalReorderQuantities() {
+        return regionalReorderQuantities;
     }
 
     public Map<Product, Supplier> getProductSuppliers() {
         return productSuppliers;
+    }
+
+    public Map<Product, Double> getLeadTimes() {
+        return leadTimes;
     }
 }
